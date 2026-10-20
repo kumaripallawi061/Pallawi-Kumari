@@ -1,0 +1,547 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Hardened Helper Functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true && (
+          (request.auth.token.role == 'admin' && request.auth.token.email_verified == true) ||
+          (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.email == request.auth.token.email &&
+           request.auth.token.email_verified == true)
+        );
+    }
+
+    // Institutional Staff Member Check
+    function isStaff() {
+      return isAdmin() || (
+        isSignedIn() && (
+          request.auth.token.get('role', '') in ['admin', 'staff', 'Principal_DDO', 'App_Admin', 'Accounts_Officer', 'Cashier'] ||
+          request.auth.token.get('staffRole', '') in ['Principal_DDO', 'App_Admin', 'Accounts_Officer', 'Cashier', 'Lecturer'] ||
+          exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid))
+        )
+      );
+    }
+
+    // Institutional Principal and DDO Check
+    function isPrincipalOrDDO() {
+      return isAdmin() || (
+        isSignedIn() && (
+          request.auth.token.get('role', '') in ['Principal_DDO', 'App_Admin'] ||
+          request.auth.token.get('staffRole', '') in ['Principal_DDO', 'App_Admin'] ||
+          (
+            exists(/databases/$(database)/documents/staffUsers/$(request.auth.uid)) && (
+              get(/databases/$(database)/documents/staffUsers/$(request.auth.uid)).data.get('role', '') in ['Principal_DDO', 'App_Admin'] ||
+              get(/databases/$(database)/documents/staffUsers/$(request.auth.uid)).data.get('staffRole', '') in ['Principal_DDO', 'App_Admin']
+            )
+          )
+        )
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isStudentSelf(data) {
+      return isSignedIn() && (
+        (data.get('id', '') == request.auth.uid) ||
+        (data.get('studentId', '') == request.auth.uid) ||
+        (request.auth.token.get('email_verified', false) == true && data.get('email', '') != '' && request.auth.token.get('email', '') != '' && data.get('email', '') == request.auth.token.get('email', '')) ||
+        (request.auth.token.get('email_verified', false) == true && data.get('studentEmail', '') != '' && request.auth.token.get('email', '') != '' && data.get('studentEmail', '') == request.auth.token.get('email', '')) ||
+        (data.get('phone', '') != '' && request.auth.token.get('phone_number', '') != '' && data.get('phone', '') == request.auth.token.get('phone_number', '')) ||
+        (data.get('studentPhone', '') != '' && request.auth.token.get('phone_number', '') != '' && data.get('studentPhone', '') == request.auth.token.get('phone_number', '')) ||
+        (data.get('rollNo', '') != '' && request.auth.token.get('rollNo', '') != '' && data.get('rollNo', '') == request.auth.token.get('rollNo', '')) ||
+        (data.get('studentRollNo', '') != '' && request.auth.token.get('rollNo', '') != '' && data.get('studentRollNo', '') == request.auth.token.get('rollNo', ''))
+      );
+    }
+
+    // 1. Healthcheck / Connection Probe
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 2. Administrators Index Collection
+    function isValidAdmin(data) {
+      return data.email is string && data.email.size() <= 128 &&
+             data.role is string && data.role.size() <= 64;
+    }
+
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isValidId(adminId) && isAdmin() && isValidAdmin(incoming());
+      allow update: if isValidId(adminId) && isAdmin() && isValidAdmin(incoming());
+      allow delete: if isValidId(adminId) && isAdmin();
+    }
+
+    // 3. User Identity Collection
+    function isValidUser(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.email is string && data.email.size() <= 128 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.role in ['student', 'admin', 'staff'];
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isOwner(userId) && isValidUser(incoming()) && (
+        isAdmin() || (
+          incoming().role == 'student' &&
+          incoming().get('staffRole', '') == '' &&
+          incoming().get('isAppAdmin', false) == false
+        )
+      );
+      allow update: if isValidId(userId) && isValidUser(incoming()) && (
+        isAdmin() || (
+          isOwner(userId) && 
+          incoming().role == existing().role &&
+          incoming().get('staffRole', '') == existing().get('staffRole', '') &&
+          incoming().get('isAppAdmin', false) == existing().get('isAppAdmin', false) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'profilePicture', 'updatedAt'])
+        )
+      );
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 4. Staff Users Collection
+    function isValidStaffUser(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.email is string && data.email.size() <= 128 &&
+             data.role is string && data.role.size() <= 64;
+    }
+
+    match /staffUsers/{staffId} {
+      allow get: if isValidId(staffId) && (isStaff() || isOwner(staffId));
+      allow list: if isStaff();
+      allow create: if isValidId(staffId) && isAdmin() && isValidStaffUser(incoming());
+      allow update: if isValidId(staffId) && isValidStaffUser(incoming()) && (
+        isAdmin() || (
+          isOwner(staffId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'password', 'isFirstLogin', 'passwordResetPending', 
+            'passwordResetRequestedAt', 'pendingNewPassword', 'updatedAt'
+          ])
+        )
+      );
+      allow delete: if isValidId(staffId) && isAdmin();
+    }
+
+    // 5. Students Collection (PII & Financial Ledger Protected)
+    function isValidStudent(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.rollNo is string && data.rollNo.size() <= 64 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.course is string && data.course.size() <= 64 &&
+             data.semester is number && data.semester >= 1 && data.semester <= 12 &&
+             data.totalFee is number && data.totalFee >= 0 &&
+             data.paidFee is number && data.paidFee >= 0 &&
+             data.pendingFee is number && data.pendingFee >= 0;
+    }
+
+    match /students/{studentId} {
+      allow get: if isValidId(studentId) && (
+        isStaff() || (isSignedIn() && (studentId == request.auth.uid || isStudentSelf(resource.data)))
+      );
+      allow list: if isStaff() || (
+        isSignedIn() && (resource.data.id == request.auth.uid || isStudentSelf(resource.data))
+      );
+      allow create: if isValidId(studentId) && isValidStudent(incoming()) && (
+        isStaff() || (
+          // Self-initialization for authenticated students strictly on uncreated profile
+          !exists(/databases/$(database)/documents/students/$(studentId)) &&
+          isSignedIn() &&
+          (studentId == request.auth.uid || isStudentSelf(incoming())) &&
+          incoming().paidFee == 0 &&
+          incoming().totalFee > 0 &&
+          incoming().totalFee == incoming().pendingFee
+        )
+      );
+      allow update: if isValidId(studentId) && isValidStudent(incoming()) && (
+        isStaff() || (
+          // Student self-service: strictly confined to non-financial profile fields
+          (studentId == request.auth.uid || isStudentSelf(existing())) &&
+          incoming().get('totalFee', 0) == existing().get('totalFee', 0) &&
+          incoming().get('paidFee', 0) == existing().get('paidFee', 0) &&
+          incoming().get('pendingFee', 0) == existing().get('pendingFee', 0) &&
+          incoming().get('rollNo', '') == existing().get('rollNo', '') &&
+          (!('appliedConcessions' in incoming()) || incoming().appliedConcessions == existing().appliedConcessions) &&
+          (!('quota' in incoming()) || incoming().quota == existing().quota) &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'isActivated', 'profilePicture', 'phone', 
+            'parentPhone', 'updatedAt'
+          ])
+        )
+      );
+      allow delete: if isValidId(studentId) && isAdmin();
+    }
+
+    // 6. Fee Transactions Collection (Anti-Forgery & Immutable Audit Ledger)
+    function isValidTransaction(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.receiptNo is string && data.receiptNo.size() <= 64 &&
+             data.studentId is string && data.studentId.size() <= 128 &&
+             data.rollNo is string && data.rollNo.size() <= 64 &&
+             (!('studentEmail' in data) || (data.studentEmail is string && data.studentEmail.size() <= 128)) &&
+             (data.amount is int || data.amount is number) && data.amount > 0 &&
+             data.paymentMethod is string && data.paymentMethod.size() <= 32 &&
+             data.status in ['Success', 'Pending', 'Failed'];
+    }
+
+    match /transactions/{transactionId} {
+      allow get, list: if isValidId(transactionId) && (
+        isStaff() || isStudentSelf(resource.data)
+      );
+      // Create: Staff or verified student paying their own fee
+      allow create: if isValidId(transactionId) && isValidTransaction(incoming()) && (
+        isStaff() || (
+          isSignedIn() &&
+          request.auth.token.firebase.sign_in_provider != 'anonymous' &&
+          (incoming().studentId == request.auth.uid || isStudentSelf(incoming()))
+        )
+      );
+      // Update: Staff only; core transaction terms remain strictly immutable
+      allow update: if isValidId(transactionId) && isStaff() && isValidTransaction(incoming()) &&
+        incoming().receiptNo == existing().receiptNo &&
+        incoming().amount == existing().amount &&
+        incoming().studentId == existing().studentId;
+      // Delete: Only System Administrator can delete (for audit reconciliation)
+      allow delete: if isValidId(transactionId) && isAdmin();
+    }
+
+    // 7. No Dues Clearance Applications Collection
+    function isValidNoDues(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.studentRollNo is string && data.studentRollNo.size() <= 64 &&
+             data.studentName is string && data.studentName.size() <= 128 &&
+             data.overallStatus in ['Approved', 'Pending', 'Rejected'];
+    }
+
+    match /noDuesApplications/{appId} {
+      allow get: if isValidId(appId) && (
+        isStaff() ||
+        (isSignedIn() && (
+          resource.data.studentId == request.auth.uid ||
+          isStudentSelf(resource.data) ||
+          (request.auth.token.rollNo is string && resource.data.studentRollNo == request.auth.token.rollNo)
+        ))
+      );
+      allow list: if isStaff() || (
+        isSignedIn() && (
+          resource.data.studentId == request.auth.uid ||
+          isStudentSelf(resource.data) ||
+          (request.auth.token.rollNo is string && resource.data.studentRollNo == request.auth.token.rollNo)
+        )
+      );
+      allow create: if isValidId(appId) && isSignedIn() && isValidNoDues(incoming()) && (
+        isStaff() ||
+        incoming().studentId == request.auth.uid ||
+        isStudentSelf(incoming())
+      );
+      allow update: if isValidId(appId) && isValidNoDues(incoming()) && (
+        isStaff() || (
+          // Student can only update their own draft if still Pending
+          existing().overallStatus == 'Pending' &&
+          (resource.data.studentId == request.auth.uid || isStudentSelf(existing())) &&
+          incoming().overallStatus == 'Pending'
+        )
+      );
+      allow delete: if isValidId(appId) && isAdmin();
+    }
+
+    // 8. Certificate Requests Collection
+    function isValidCertificateRequest(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.studentRollNo is string && data.studentRollNo.size() <= 64 &&
+             data.certificateType is string && data.certificateType.size() <= 64 &&
+             data.status in ['Issued', 'Pending_Approval', 'Draft', 'Rejected'];
+    }
+
+    match /certificateRequests/{requestId} {
+      allow get, list: if isValidId(requestId) && (
+        isStaff() || isStudentSelf(resource.data) || (isSignedIn() && request.auth.token.rollNo is string && resource.data.studentRollNo == request.auth.token.rollNo)
+      );
+      allow create: if isValidId(requestId) && isSignedIn() && isValidCertificateRequest(incoming()) && (
+        isStaff() ||
+        incoming().get('studentId', '') == request.auth.uid ||
+        isStudentSelf(incoming()) ||
+        (request.auth.token.rollNo is string && incoming().studentRollNo == request.auth.token.rollNo)
+      ) && incoming().status in ['Draft', 'Pending_Approval'];
+      allow update: if isValidId(requestId) && isValidCertificateRequest(incoming()) && (
+        isStaff() || (
+          // Student can only edit remarks/draft when not yet Issued
+          existing().status != 'Issued' &&
+          (resource.data.studentId == request.auth.uid || 
+           isStudentSelf(resource.data) ||
+           (request.auth.token.rollNo is string && resource.data.studentRollNo == request.auth.token.rollNo)) &&
+          incoming().status in ['Draft', 'Pending_Approval']
+        )
+      );
+      allow delete: if isValidId(requestId) && isAdmin();
+    }
+
+    // 9. Academic Subjects & Practical Fees
+    function isValidSubject(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.code is string && data.code.size() <= 32 &&
+             (
+               (data.title is string && data.title.size() <= 128) ||
+               (data.name is string && data.name.size() <= 128)
+             );
+    }
+
+    match /subjects/{subjectId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(subjectId) && isStaff() && isValidSubject(incoming());
+      allow delete: if isValidId(subjectId) && isAdmin();
+    }
+
+    // 9b. Academic Streams & Degree Programs
+    function isValidStream(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.code is string && data.code.size() <= 32 &&
+             data.name is string && data.name.size() <= 128;
+    }
+
+    match /streams/{streamId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(streamId) && isStaff() && isValidStream(incoming());
+      allow delete: if isValidId(streamId) && isAdmin();
+    }
+
+    // 10. Helpdesk Configuration
+    function isValidHelpdeskConfig(data) {
+      return data.enabled is bool;
+    }
+
+    match /helpdeskConfig/{configId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(configId) && isAdmin() && isValidHelpdeskConfig(incoming());
+      allow delete: if isValidId(configId) && isAdmin();
+    }
+
+    // 11. Helpdesk Grievance Tickets
+    function isValidHelpdeskTicket(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.subject is string && data.subject.size() <= 256 &&
+             data.category is string && data.category.size() <= 64 &&
+             data.status in ['Open', 'In_Progress', 'Resolved', 'Closed'];
+    }
+
+    match /helpdeskTickets/{ticketId} {
+      allow get: if isValidId(ticketId) && (
+        isStaff() ||
+        (isSignedIn() && (
+          resource.data.userId == request.auth.uid ||
+          resource.data.studentId == request.auth.uid ||
+          (request.auth.token.rollNo is string && resource.data.studentRollNo == request.auth.token.rollNo)
+        ))
+      );
+      allow list: if isStaff() || (
+        isSignedIn() && (
+          resource.data.userId == request.auth.uid ||
+          resource.data.studentId == request.auth.uid ||
+          (request.auth.token.rollNo is string && resource.data.studentRollNo == request.auth.token.rollNo)
+        )
+      );
+      allow create: if isValidId(ticketId) && isSignedIn() && 
+                    isValidHelpdeskTicket(incoming()) && (
+                      isStaff() ||
+                      incoming().userId == request.auth.uid ||
+                      incoming().get('studentId', '') == request.auth.uid ||
+                      isStudentSelf(incoming())
+                    );
+      allow update: if isValidId(ticketId) && isValidHelpdeskTicket(incoming()) && (
+        isStaff() || (
+          isSignedIn() && (
+            resource.data.userId == request.auth.uid ||
+            resource.data.studentId == request.auth.uid ||
+            (request.auth.token.rollNo is string && resource.data.studentRollNo == request.auth.token.rollNo)
+          )
+        )
+      );
+      allow delete: if isValidId(ticketId) && isAdmin();
+    }
+
+    // 12. Certificate Design Themes
+    function isValidCertificateTheme(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 128;
+    }
+
+    match /certificateThemes/{themeId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(themeId) && isAdmin() && isValidCertificateTheme(incoming());
+      allow delete: if isValidId(themeId) && isAdmin();
+    }
+
+    // 13. Payment Provider Configuration (Zero-Trust Gateway Credentials)
+    function isValidPaymentProvider(data) {
+      return data.provider is string && data.provider.size() <= 64 &&
+             data.active is bool;
+    }
+
+    match /paymentProvider/{providerId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(providerId) && isAdmin() && isValidPaymentProvider(incoming());
+      allow delete: if isValidId(providerId) && isAdmin();
+    }
+
+    // 14. Institutional College Profile & Statutory Details
+    function isValidInstitutionProfile(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 128 &&
+             data.shortName is string && data.shortName.size() <= 32 &&
+             data.dept is string && data.dept.size() <= 256 &&
+             data.address is string && data.address.size() <= 512 &&
+             data.contactEmail is string && data.contactEmail.size() <= 128;
+    }
+
+    match /institutionProfile/{profileId} {
+      allow get: if true;
+      allow list: if isSignedIn();
+      allow create, update: if isValidId(profileId) && (isAdmin() || isPrincipalOrDDO()) && isValidInstitutionProfile(incoming());
+      allow delete: if isValidId(profileId) && isAdmin();
+    }
+
+    // 15. Fee Campaigns Collection
+    function isValidCampaign(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.title is string && data.title.size() <= 256;
+    }
+
+    match /campaigns/{campaignId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(campaignId) && isPrincipalOrDDO() && isValidCampaign(incoming());
+      allow delete: if isValidId(campaignId) && (isAdmin() || isPrincipalOrDDO());
+    }
+
+    // 16. Campaign Student Dues Collection
+    function isValidStudentDue(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.rollNo is string && data.rollNo.size() <= 64 &&
+             data.campaignId is string && data.campaignId.size() <= 128;
+    }
+
+    function isValidDueArithmetic(data) {
+      let lateFee = data.get('lateFeeApplied', 0);
+      return (data.baseAmount is number || data.baseAmount is int) && data.baseAmount >= 0 &&
+             (data.concessionAmount is number || data.concessionAmount is int) && data.concessionAmount >= 0 &&
+             (data.netAmount is number || data.netAmount is int) && data.netAmount >= 0 &&
+             (data.paidAmount is number || data.paidAmount is int) && data.paidAmount >= 0 &&
+             (data.balanceAmount is number || data.balanceAmount is int) && data.balanceAmount >= 0 &&
+             (lateFee is number || lateFee is int) && lateFee >= 0 &&
+             (
+               data.baseAmount - data.concessionAmount == data.netAmount ||
+               (data.baseAmount - data.concessionAmount - data.netAmount >= -0.01 && data.baseAmount - data.concessionAmount - data.netAmount <= 0.01)
+             ) &&
+             (
+               (data.netAmount + lateFee) - data.paidAmount == data.balanceAmount ||
+               ((data.netAmount + lateFee) - data.paidAmount - data.balanceAmount >= -0.01 && (data.netAmount + lateFee) - data.paidAmount - data.balanceAmount <= 0.01)
+             );
+    }
+
+    match /studentDues/{dueId} {
+      allow get, list: if isStaff() || isStudentSelf(resource.data);
+      // Allow Principal & DDO to create student dues with verified baseline arithmetic, or student self-initialization
+      allow create: if isValidId(dueId) && isValidStudentDue(incoming()) && isValidDueArithmetic(incoming()) && (
+        isPrincipalOrDDO() || (
+          isSignedIn() &&
+          incoming().paidAmount == 0 &&
+          incoming().balanceAmount == incoming().netAmount &&
+          (incoming().studentId == request.auth.uid || isStudentSelf(incoming()))
+        )
+      );
+
+      // Restrict updates: Principal/DDO or Admin with verified arithmetic OR Students modifying only non-financial profile fields
+      allow update: if isSignedIn() && (
+        ((isAdmin() || isPrincipalOrDDO()) && isValidDueArithmetic(incoming())) || (
+          isOwner(existing().studentId) &&
+          incoming().netAmount == existing().netAmount &&
+          incoming().balanceAmount == existing().balanceAmount &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['phone', 'updatedAt'])
+        )
+      );
+      allow delete: if isValidId(dueId) && isAdmin();
+    }
+
+    // 17. Campaign Payments Collection
+    function isValidCampaignPayment(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.campaignId is string && data.campaignId.size() <= 128 &&
+             (!('studentId' in data) || (data.studentId is string && data.studentId.size() <= 128)) &&
+             data.rollNo is string && data.rollNo.size() <= 64 &&
+             (data.amountPaid is int || data.amountPaid is number) && data.amountPaid > 0 &&
+             data.status in ['Success', 'Pending', 'Failed', 'Mismatched', 'Cancelled', 'Refunded'];
+    }
+
+    match /campaignPayments/{paymentId} {
+      allow get, list: if isStaff() || isStudentSelf(resource.data) || (isSignedIn() && resource.data.rollNo is string);
+      allow create: if isValidId(paymentId) && isSignedIn() && isValidCampaignPayment(incoming()) && (
+        isStaff() ||
+        incoming().get('studentId', '') == request.auth.uid ||
+        isStudentSelf(incoming()) ||
+        (incoming().rollNo is string && incoming().amountPaid > 0)
+      );
+      allow update, delete: if isValidId(paymentId) && (isAdmin() || isPrincipalOrDDO());
+    }
+
+    // 18. Audit Logs (Append-Only Immutable Ledger)
+    match /auditLogs/{logId} {
+      allow get, list: if isStaff();
+      allow create: if isValidId(logId) && isStaff() && (
+        isAdmin() ||
+        incoming().get('userEmail', '') == request.auth.token.get('email', '') ||
+        incoming().get('userId', '') == request.auth.uid
+      );
+      allow update, delete: if false; // Audit logs can NEVER be updated or deleted
+    }
+
+    // 19. Dynamic UPI QR Gateway & Bank Account Mapping
+    match /dynamicQrConfig/{configId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(configId) && (isAdmin() || isStaff());
+      allow delete: if isValidId(configId) && isAdmin();
+    }
+
+    // 20. Student Notifications Collection
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(notificationId) && (isAdmin() || isStaff());
+      allow delete: if isValidId(notificationId) && isAdmin();
+    }
+
+    // 21. Student Achievements & Honors Collection
+    match /achievements/{achievementId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isValidId(achievementId) && (isAdmin() || isStaff());
+      allow delete: if isValidId(achievementId) && (isAdmin() || isStaff());
+    }
+  }
+}

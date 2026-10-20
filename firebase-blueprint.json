@@ -1,0 +1,360 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered ERP user profile and authentication identity",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["student", "admin", "staff"] },
+        "staffRole": { "type": "string", "maxLength": 64 },
+        "rollNo": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "email", "name", "role"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Institutional administrator authorization record",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["email", "role"]
+    },
+    "StaffUser": {
+      "title": "StaffUser",
+      "description": "Institutional faculty, accountant, or administrative officer credential and session record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 64 },
+        "designation": { "type": "string", "maxLength": 128 },
+        "department": { "type": "string", "maxLength": 64 },
+        "isAppAdmin": { "type": "boolean" },
+        "isFirstLogin": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Enrolled student academic and financial ledger record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "rollNo": { "type": "string", "maxLength": 64 },
+        "registerNo": { "type": "string", "maxLength": 64 },
+        "name": { "type": "string", "maxLength": 128 },
+        "gender": { "type": "string", "maxLength": 16 },
+        "email": { "type": "string", "format": "email", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "parentPhone": { "type": "string", "maxLength": 32 },
+        "course": { "type": "string", "maxLength": 64 },
+        "branch": { "type": "string", "maxLength": 64 },
+        "year": { "type": "number" },
+        "semester": { "type": "number" },
+        "totalFee": { "type": "number" },
+        "paidFee": { "type": "number" },
+        "pendingFee": { "type": "number" },
+        "lateFineApplied": { "type": "number" },
+        "scholarshipWaiverPercent": { "type": "number" },
+        "scholarshipName": { "type": "string", "maxLength": 128 },
+        "hallTicketBlocked": { "type": "boolean" },
+        "quota": { "type": "string", "maxLength": 64 },
+        "hostelResident": { "type": "boolean" },
+        "busUser": { "type": "boolean" },
+        "isActivated": { "type": "boolean" },
+        "profilePicture": { "type": "string", "maxLength": 100000 },
+        "streamCode": { "type": "string", "maxLength": 32 },
+        "dateOfBirth": { "type": "string", "maxLength": 32 },
+        "appliedConcessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ruleName": { "type": "string" },
+              "amount": { "type": "number" }
+            }
+          }
+        },
+        "appliedSurcharges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ruleName": { "type": "string" },
+              "amount": { "type": "number" }
+            }
+          }
+        },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "rollNo", "name", "course", "semester", "totalFee", "paidFee", "pendingFee"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Fee payment receipt and transaction ledger item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "receiptNo": { "type": "string", "maxLength": 64 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "rollNo": { "type": "string", "maxLength": 64 },
+        "course": { "type": "string", "maxLength": 128 },
+        "semester": { "type": "number" },
+        "amount": { "type": "number" },
+        "lateFineIncluded": { "type": "number" },
+        "discountApplied": { "type": "number" },
+        "paymentMethod": { "type": "string", "maxLength": 32 },
+        "gateway": { "type": "string", "maxLength": 64 },
+        "gatewayTransactionId": { "type": "string", "maxLength": 128 },
+        "bankUtr": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "status": { "type": "string", "enum": ["Success", "Pending", "Failed"] }
+      },
+      "required": ["id", "receiptNo", "studentId", "rollNo", "amount", "paymentMethod", "status"]
+    },
+    "NoDuesApplication": {
+      "title": "NoDuesApplication",
+      "description": "Inter-departmental clearance application",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentRollNo": { "type": "string", "maxLength": 64 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "program": { "type": "string", "maxLength": 64 },
+        "semester": { "type": "number" },
+        "academicYear": { "type": "string", "maxLength": 32 },
+        "submissionDate": { "type": "string", "maxLength": 32 },
+        "overallStatus": { "type": "string", "enum": ["Approved", "Pending", "Rejected"] }
+      },
+      "required": ["id", "studentRollNo", "studentName", "overallStatus"]
+    },
+    "CertificateRequest": {
+      "title": "CertificateRequest",
+      "description": "Student certificate issuance request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "studentRollNo": { "type": "string", "maxLength": 64 },
+        "studentName": { "type": "string", "maxLength": 128 },
+        "certificateType": { "type": "string", "maxLength": 64 },
+        "requestDate": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["Issued", "Pending_Approval", "Draft", "Rejected"] },
+        "verificationHash": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "studentRollNo", "certificateType", "status"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Course curriculum subject and practical fee master",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 32 },
+        "title": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "stream": { "type": "string", "maxLength": 64 },
+        "streamCode": { "type": "string", "maxLength": 64 },
+        "semester": { "type": "number" },
+        "labFee": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "code"]
+    },
+    "HelpdeskConfig": {
+      "title": "HelpdeskConfig",
+      "description": "Helpdesk ticket channels, working hours, and emergency contacts",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hotline": { "type": "string", "maxLength": 64 },
+        "email": { "type": "string", "format": "email", "maxLength": 128 },
+        "hours": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["enabled"]
+    },
+    "HelpdeskTicket": {
+      "title": "HelpdeskTicket",
+      "description": "Student grievance and fee reconciliation query ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "studentRollNo": { "type": "string", "maxLength": 64 },
+        "subject": { "type": "string", "maxLength": 256 },
+        "category": { "type": "string", "maxLength": 64 },
+        "description": { "type": "string", "maxLength": 2048 },
+        "status": { "type": "string", "enum": ["Open", "In_Progress", "Resolved", "Closed"] },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "subject", "category", "status"]
+    },
+    "CertificateTheme": {
+      "title": "CertificateTheme",
+      "description": "Official college seal and certificate theme layout",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "primaryColor": { "type": "string", "maxLength": 32 },
+        "secondaryColor": { "type": "string", "maxLength": 32 },
+        "borderStyle": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name"]
+    },
+    "PaymentProvider": {
+      "title": "PaymentProvider",
+      "description": "Active payment gateway credentials and settlement parameters",
+      "type": "object",
+      "properties": {
+        "provider": { "type": "string", "maxLength": 64 },
+        "merchantId": { "type": "string", "maxLength": 128 },
+        "apiKey": { "type": "string", "maxLength": 256 },
+        "webhookSecret": { "type": "string", "maxLength": 256 },
+        "active": { "type": "boolean" },
+        "mode": { "type": "string", "enum": ["Sandbox", "Production"] },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["provider", "active"]
+    },
+    "InstitutionProfile": {
+      "title": "InstitutionProfile",
+      "description": "Institutional identity, statutory accreditation, campus contacts and financial headers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "shortName": { "type": "string", "maxLength": 32 },
+        "fullName": { "type": "string", "maxLength": 256 },
+        "dept": { "type": "string", "maxLength": 256 },
+        "accreditation": { "type": "string", "maxLength": 256 },
+        "affiliation": { "type": "string", "maxLength": 256 },
+        "address": { "type": "string", "maxLength": 512 },
+        "contactEmail": { "type": "string", "format": "email", "maxLength": 128 },
+        "accountsEmail": { "type": "string", "format": "email", "maxLength": 128 },
+        "contactPhone": { "type": "string", "maxLength": 64 },
+        "helplinePhone": { "type": "string", "maxLength": 64 },
+        "treasuryCode": { "type": "string", "maxLength": 256 },
+        "ddoTreasuryCode": { "type": "string", "maxLength": 128 },
+        "ifmsReceiptHead": { "type": "string", "maxLength": 128 },
+        "academicSession": { "type": "string", "maxLength": 64 },
+        "currentTerm": { "type": "string", "maxLength": 64 },
+        "principalName": { "type": "string", "maxLength": 128 },
+        "principalTitle": { "type": "string", "maxLength": 128 },
+        "officeHours": { "type": "string", "maxLength": 128 },
+        "websiteUrl": { "type": "string", "maxLength": 256 },
+        "establishedYear": { "type": "string", "maxLength": 32 },
+        "bannerNotice": { "type": "string", "maxLength": 512 },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "name", "shortName", "dept", "accreditation", "address", "contactEmail"]
+    },
+    "TestDocument": {
+      "title": "TestDocument",
+      "description": "Database healthcheck connection probe",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "maxLength": 32 }
+      },
+      "required": ["status"]
+    },
+    "StudentDue": {
+      "title": "StudentDue",
+      "description": "Student campaign fee due ledger record with arithmetic balance verification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "rollNo": { "type": "string", "maxLength": 64 },
+        "studentEmail": { "type": "string", "format": "email", "maxLength": 128 },
+        "campaignId": { "type": "string", "maxLength": 128 },
+        "baseAmount": { "type": "number" },
+        "concessionAmount": { "type": "number" },
+        "netAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "balanceAmount": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "rollNo", "campaignId", "baseAmount", "concessionAmount", "netAmount", "paidAmount", "balanceAmount"]
+    }
+  },
+  "firestore": {
+    "/test/{docId}": {
+      "schema": { "$ref": "#/entities/TestDocument" },
+      "description": "Database connection test probe"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Trusted administrative authorization index"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Registered user accounts and profile data"
+    },
+    "/staffUsers/{staffId}": {
+      "schema": { "$ref": "#/entities/StaffUser" },
+      "description": "College staff and departmental officers"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Student academic fee profiles and ledger status"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Institutional fee transactions and payment receipts"
+    },
+    "/noDuesApplications/{appId}": {
+      "schema": { "$ref": "#/entities/NoDuesApplication" },
+      "description": "Student departmental no-dues clearance applications"
+    },
+    "/certificateRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/CertificateRequest" },
+      "description": "Student digital certificate and clearance requests"
+    },
+    "/subjects/{subjectId}": {
+      "schema": { "$ref": "#/entities/Subject" },
+      "description": "Academic subjects and elective fee structures"
+    },
+    "/helpdeskConfig/{configId}": {
+      "schema": { "$ref": "#/entities/HelpdeskConfig" },
+      "description": "Institutional helpdesk configuration settings"
+    },
+    "/helpdeskTickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/HelpdeskTicket" },
+      "description": "Student grievance and fee support tickets"
+    },
+    "/certificateThemes/{themeId}": {
+      "schema": { "$ref": "#/entities/CertificateTheme" },
+      "description": "Branding layouts and certificate design themes"
+    },
+    "/paymentProvider/{providerId}": {
+      "schema": { "$ref": "#/entities/PaymentProvider" },
+      "description": "Institutional online payment gateway configuration"
+    },
+    "/institutionProfile/{profileId}": {
+      "schema": { "$ref": "#/entities/InstitutionProfile" },
+      "description": "Institutional profile details, contacts, statutory headers and affiliation"
+    },
+    "/studentDues/{dueId}": {
+      "schema": { "$ref": "#/entities/StudentDue" },
+      "description": "Student campaign fee dues with arithmetic validation"
+    }
+  }
+}

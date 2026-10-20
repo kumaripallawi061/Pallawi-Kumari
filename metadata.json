@@ -1,0 +1,6 @@
+{
+  "name": "Govt College ERP - Fee Collection, No Dues & Certificate System",
+  "description": "Government college ERP system for student fee collection via SBI Collect & e-Treasury, automated inter-departmental No Dues clearance, and certificate issuance (Bonafide, TC, Migration, Provisional).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
